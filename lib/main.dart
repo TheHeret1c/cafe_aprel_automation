@@ -58,11 +58,39 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  String? _loginError;
+  String? _passwordError;
+
   void _authorize() {
     print('Кнопка авторизации нажата');
-    print(_loginController.text);
-    print(_passwordController.text);
+    String? loginError;
+    String? passwordError;
 
+    if (_loginController.text.isEmpty && _passwordController.text.isEmpty) {
+      loginError = 'Заполните логин';
+      passwordError = 'Заполните пароль';
+    } else if (_loginController.text.isEmpty) {
+      loginError = 'Заполните логин';
+    } else if (_passwordController.text.isEmpty) {
+      passwordError = 'Заполните пароль';
+    }
+
+    setState(() {
+      _loginError = loginError;
+      _passwordError = passwordError;
+    });
+
+    if (loginError == null && passwordError == null) {
+      print('Есть авторизация!');
+    }
+  }
+
+  @override
+  void dispose() {
+    _loginController.dispose();
+    _passwordController.dispose();
+
+    super.dispose();
   }
 
   @override
@@ -86,7 +114,15 @@ class _MyHomePageState extends State<MyHomePage> {
                 children: [
                   TextField(
                     controller: _loginController,
+                    onChanged: (value) {
+                      if (_loginError != null && value.isNotEmpty) {
+                        setState(() {
+                          _loginError = null;
+                        });
+                      }
+                    },
                     decoration: InputDecoration(
+                      errorText: _loginError,
                       border: OutlineInputBorder(),
                       labelText: 'Логин',
                     ),
@@ -94,8 +130,16 @@ class _MyHomePageState extends State<MyHomePage> {
                   SizedBox(height: 16),
                   TextField(
                     controller: _passwordController,
+                    onChanged: (value) {
+                      if (_passwordError != null && value.isNotEmpty) {
+                        setState(() {
+                          _passwordError = null;
+                        });
+                      }
+                    },
                     obscureText: true,
                     decoration: InputDecoration(
+                      errorText: _passwordError,
                       border: OutlineInputBorder(),
                       labelText: 'Пароль',
                     ),
