@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'home_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -61,7 +62,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _loginError;
   String? _passwordError;
 
-  void _authorize() {
+  void _authorize(BuildContext context) {
     print('Кнопка авторизации нажата');
     String? loginError;
     String? passwordError;
@@ -82,6 +83,10 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (loginError == null && passwordError == null) {
       print('Есть авторизация!');
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => HomeScreen()),
+      );
     }
   }
 
@@ -146,7 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   SizedBox(height: 16),
                   ElevatedButton(
-                      onPressed: _authorize,
+                      onPressed: () => _authorize(context),
                       child: const Text('Авторизоваться', style: TextStyle(fontSize: 16),)
                   ),
                 ],
