@@ -1,12 +1,20 @@
+import 'package:cafe_automation/screens/inventory_screen.dart';
 import 'package:flutter/material.dart';
-import '../widgets/menu_card.dart';
+import '../widgets/module_tile.dart';
 
 class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  void _openInventory(BuildContext context) {
+    Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const InventoryScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Кафе Апрель')),
-      //body: const Center(child: Text('Главный экран')),
       body: GridView.count(
         crossAxisCount: 2,
         childAspectRatio: 1,
@@ -29,9 +37,7 @@ class HomeScreen extends StatelessWidget {
           MenuCard(
             icon: Icons.inventory_2,
             title: 'Склад',
-            onTap:() {
-              print('Нажали на склад');
-            },
+            onTap:() => _openInventory(context),
           ),
           MenuCard(
             icon: Icons.settings,
