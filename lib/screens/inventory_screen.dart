@@ -1,7 +1,13 @@
+import 'dart:convert';
+
 import 'package:cafe_automation/data/database_helper.dart';
 import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
 import 'package:uuid/uuid.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -16,6 +22,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +36,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
     super.dispose();
   }
 
+  void _exportToCsv() async {
+    final rows = <List<dynamic>>[
+      ['Категория', 'Название', 'Количество', 'Единица'],
+    ];
+
+    for (final ingredient in _ingredients) {
+      rows.add([
+        ingredient.category,
+        ingredient.name,
+        ingredient.quantity,
+        ingredient.unit,
+      ]);
+    }
+
+    final csvData = const ListToCsvConverter().convert(rows);
+
+    final directory = await getTemporaryDirectory();
+    final now = DateTime.now();
+    final fileName = 'ostatki_${now.year}-${now.month}-${now.day}.csv';
+    final file = File('${directory.path}/$fileName');
+    final bom = '\uFEFF';
+    await file.writeAsString(bom + csvData, encoding: const Utf8Codec());
+
+    if (mounted) {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Остатки на ${now.day}.${now.month}.${now.year}',
+      );
+    }
+  }
+
   Future<void> _loadIngredients() async {
+    await Future.delayed(Duration(seconds: 1));
+
     final categoryRows = await DatabaseHelper.instance.getAllCategories();
     final categoryNames = {
       for (final row in categoryRows) row['id'] as String: row['name'] as String
@@ -44,6 +85,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           category: categoryNames[row['category_id']] ?? 'Без категории',
           quantity: row['quantity'] as double,
       )).toList();
+      _isLoading = false;
     });
   }
 
@@ -333,7 +375,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final categories = grouped.keys.toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Остатки')),
+      appBar: AppBar(
+        title: const Text('Остатки'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            onPressed: _exportToCsv,
+            tooltip: 'Экспорт в CSV',
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addIngredient,
         child: const Icon(Icons.add),
@@ -368,7 +419,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           ),
           Expanded(
-            child: isSearching
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : (isSearching
                 ? ListView.builder(
               itemCount: filteredIngredients.length,
               itemBuilder: (context, index) {
@@ -392,14 +445,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   children: items.map((ingredient) {
                     return ListTile(
                       title: Text(ingredient.name),
-                      trailing: Text(
-                          '${ingredient.quantity} ${ingredient.unit}'),
+                      trailing: Text('${ingredient.quantity} ${ingredient.unit}'),
                       onTap: () => _editQuantity(ingredient),
                     );
                   }).toList(),
                 );
               },
-            ),
+            )),
           ),
         ],
       ),
