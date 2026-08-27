@@ -1,6 +1,6 @@
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite/sql.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -64,7 +64,7 @@ class DatabaseHelper {
 
     for (final name in initialCategories) {
       await db.insert('categories', {
-        'id': name.hashCode.toString(),
+        'id': const Uuid().v4(),
         'name': name,
         'revision': 0,
         'updated_at': now,
@@ -98,6 +98,15 @@ class DatabaseHelper {
     await db.update(
       'ingredients',
       {'quantity': quantity, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> deleteIngredient(String id) async {
+    final db = await database;
+    await db.delete(
+      'ingredients',
       where: 'id = ?',
       whereArgs: [id],
     );

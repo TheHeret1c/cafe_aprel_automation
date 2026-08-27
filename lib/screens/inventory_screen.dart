@@ -1,8 +1,7 @@
 import 'package:cafe_automation/data/database_helper.dart';
 import 'package:flutter/material.dart';
-import '../data/mock_ingredients.dart';
 import '../models/ingredient.dart';
-import '../data/database_helper.dart';
+import 'package:uuid/uuid.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -12,15 +11,15 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
-  late List<Ingredient> _ingredients;
+  List<Ingredient> _ingredients = [];
+  List<Map<String, dynamic>> _categoryRows = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _ingredients = List.from(mockIngredients);
-    _checkDatabase();
+    _loadIngredients();
   }
 
   @override
@@ -29,7 +28,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     super.dispose();
   }
 
-  void _loadIngredients() async {
+  Future<void> _loadIngredients() async {
     final categoryRows = await DatabaseHelper.instance.getAllCategories();
     final categoryNames = {
       for (final row in categoryRows) row['id'] as String: row['name'] as String
@@ -37,6 +36,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     final ingredientsRows = await DatabaseHelper.instance.getAllIngredients();
     setState(() {
+      _categoryRows = categoryRows;
       _ingredients = ingredientsRows.map((row) => Ingredient(
           id: row['id'] as String,
           name: row['name'] as String,
@@ -45,11 +45,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
           quantity: row['quantity'] as double,
       )).toList();
     });
-  }
-
-  void _checkDatabase() async {
-    final categories = await DatabaseHelper.instance.getAllCategories();
-    print('Категории в базе: $categories');
   }
 
   Map<String, List<Ingredient>> _groupByCategory(List<Ingredient> ingredients) {
@@ -67,6 +62,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         .toList();
   }
 
+  // Изменение количества ингредиента
   void _editQuantity(Ingredient ingredient) {
     final controller = TextEditingController(
         text: ingredient.quantity.toString());
@@ -119,26 +115,200 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    final newValue = double.tryParse(controller.text);
-                    if (newValue != null) {
-                      setState(() {
-                        final index = _ingredients.indexWhere((i) =>
-                        i.id == ingredient.id);
-                        _ingredients[index] = ingredient.copyWith(
-                            quantity: newValue);
-                      });
-                    }
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Сохранить'),
-                ),
-              )
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Удалить ингредиент?'),
+                            content: Text('«${ingredient.name}» будет удалён из списка.'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Отмена'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await DatabaseHelper.instance.deleteIngredient(ingredient.id);
+                          await _loadIngredients();
+                          if (context.mounted) Navigator.pop(context);
+                        }
+                      },
+                      child: const Text('Удалить'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final newValue = double.tryParse(controller.text);
+                        if (newValue != null) {
+                          await DatabaseHelper.instance.updateIngredientQuantity(ingredient.id, newValue);
+                          await _loadIngredients();
+                          // setState(() {
+                          //   final index = _ingredients.indexWhere((i) =>
+                          //   i.id == ingredient.id);
+                          //   _ingredients[index] = ingredient.copyWith(
+                          //       quantity: newValue);
+                          // });
+                        }
+                        if (context.mounted) Navigator.pop(context);
+                        //Navigator.pop(context);
+                      },
+                      child: const Text('Сохранить'),
+                    ),
+                  ),
+                ],
+              ),
+              // SizedBox(
+              //   width: double.infinity,
+              //   child: ElevatedButton(
+              //     onPressed: () async {
+              //       final newValue = double.tryParse(controller.text);
+              //       if (newValue != null) {
+              //         await DatabaseHelper.instance.updateIngredientQuantity(ingredient.id, newValue);
+              //         await _loadIngredients();
+              //         // setState(() {
+              //         //   final index = _ingredients.indexWhere((i) =>
+              //         //   i.id == ingredient.id);
+              //         //   _ingredients[index] = ingredient.copyWith(
+              //         //       quantity: newValue);
+              //         // });
+              //       }
+              //       if (context.mounted) Navigator.pop(context);
+              //       //Navigator.pop(context);
+              //     },
+              //     child: const Text('Сохранить'),
+              //   ),
+              // )
             ],
           ),
+        );
+      },
+    );
+  }
+
+  // Добавление нового ингредиента
+  void _addIngredient() {
+    final nameController = TextEditingController();
+    final quantityController = TextEditingController(text: '0');
+    String selectedUnit = 'кг';
+    String? selectedCategoryId = _categoryRows.isNotEmpty ? _categoryRows.first['id'] as String : null;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Новый ингредиент', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
+                  const SizedBox(height: 16,),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Название',
+                    ),
+                  ),
+                  const SizedBox(height: 12,),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedCategoryId,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Категория',
+                    ),
+                    items: _categoryRows.map((row) {
+                      return DropdownMenuItem<String>(
+                        value: row['id'] as String,
+                        child: Text(row['name'] as String),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setModalState(() {
+                        selectedCategoryId = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12,),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedUnit,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Единица измерения',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'кг', child: Text('кг')),
+                      DropdownMenuItem(value: 'л', child: Text('л')),
+                      DropdownMenuItem(value: 'шт', child: Text('шт')),
+                    ],
+                    onChanged: (value) {
+                      setModalState(() {
+                        selectedUnit = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12,),
+                  TextField(
+                    controller: quantityController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Начальное количество',
+                    ),
+                  ),
+                  const SizedBox(height: 16,),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                        onPressed: () async {
+                          final name = nameController.text.trim();
+                          final quantity = double.tryParse(quantityController.text) ?? 0;
+
+                          if (name.isEmpty || selectedCategoryId == null) return;
+
+                          final newIngredient = {
+                            'id': const Uuid().v4(),
+                            'name': name,
+                            'unit': selectedUnit,
+                            'category_id': selectedCategoryId,
+                            'quantity': quantity,
+                            'revision': 0,
+                            'updated_at': DateTime.now().toIso8601String(),
+                            'is_synced': 0,
+                          };
+
+                          await DatabaseHelper.instance.insertIngredient(newIngredient);
+                          await _loadIngredients();
+
+                          if (context.mounted) Navigator.pop(context);
+                        },
+                        child: const Text('Добавить')),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -164,6 +334,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Остатки')),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addIngredient,
+        child: const Icon(Icons.add),
+      ),
       body: Column(
         children: [
           Padding(
