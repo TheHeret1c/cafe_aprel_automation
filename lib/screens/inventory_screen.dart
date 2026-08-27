@@ -1,6 +1,8 @@
+import 'package:cafe_automation/data/database_helper.dart';
 import 'package:flutter/material.dart';
 import '../data/mock_ingredients.dart';
 import '../models/ingredient.dart';
+import '../data/database_helper.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -18,12 +20,36 @@ class _InventoryScreenState extends State<InventoryScreen> {
   void initState() {
     super.initState();
     _ingredients = List.from(mockIngredients);
+    _checkDatabase();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _loadIngredients() async {
+    final categoryRows = await DatabaseHelper.instance.getAllCategories();
+    final categoryNames = {
+      for (final row in categoryRows) row['id'] as String: row['name'] as String
+    };
+
+    final ingredientsRows = await DatabaseHelper.instance.getAllIngredients();
+    setState(() {
+      _ingredients = ingredientsRows.map((row) => Ingredient(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          unit: row['unit'] as String,
+          category: categoryNames[row['category_id']] ?? 'Без категории',
+          quantity: row['quantity'] as double,
+      )).toList();
+    });
+  }
+
+  void _checkDatabase() async {
+    final categories = await DatabaseHelper.instance.getAllCategories();
+    print('Категории в базе: $categories');
   }
 
   Map<String, List<Ingredient>> _groupByCategory(List<Ingredient> ingredients) {
