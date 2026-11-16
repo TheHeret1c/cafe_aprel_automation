@@ -1,4 +1,5 @@
 import 'package:cafe_automation/screens/inventory_screen.dart';
+import 'package:cafe_automation/screens/settings_screen.dart';
 import 'package:flutter/material.dart';
 import '../widgets/module_tile.dart';
 
@@ -9,6 +10,13 @@ class HomeScreen extends StatelessWidget {
     Navigator.push(
     context,
     MaterialPageRoute(builder: (context) => const InventoryScreen()));
+  }
+
+  void _openSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsScreen()),
+    );
   }
 
   @override
@@ -42,9 +50,7 @@ class HomeScreen extends StatelessWidget {
           MenuCard(
             icon: Icons.settings,
             title: 'Настройки',
-            onTap:() {
-              print('Нажали на настройки');
-            },
+            onTap:() => _openSettings(context),
           ),
         ],
       ),

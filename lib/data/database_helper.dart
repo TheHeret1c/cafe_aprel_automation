@@ -106,6 +106,19 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> updateIngredientCategory(String id, String categoryId) async {
+    final db = await database;
+    await db.update(
+      'ingredients',
+      {
+        'category_id': categoryId,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> deleteIngredient(String id) async {
     final db = await database;
     await db.delete(
@@ -119,5 +132,44 @@ class DatabaseHelper {
     final db = await database;
     final rows = await db.query('categories');
     return rows.map(Category.fromMap).toList();
+  }
+
+  Future<void> addCategory(String name) async {
+    final db = await database;
+    await db.insert('categories', {
+      'id': const Uuid().v4(),
+      'name': name,
+      'revision': 0,
+      'updated_at': DateTime.now().toIso8601String(),
+      'is_synced': 0,
+    });
+  }
+
+  Future<void> renameCategory(String id, String name) async {
+    final db = await database;
+    await db.update(
+      'categories',
+      {
+        'name': name,
+        'updated_at': DateTime.now().toIso8601String(),
+        'is_synced': 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> countIngredientsCategory(String id) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) FROM ingredients WHERE category_id = ?',
+      [id],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<void> deleteCategory(String id) async {
+    final db = await database;
+    await db.delete('categories', where: 'id = ?', whereArgs: [id]);
   }
 }

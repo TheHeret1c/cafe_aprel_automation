@@ -82,6 +82,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           name: row['name'] as String,
           unit: row['unit'] as String,
           category: categoryNames[row['category_id']] ?? 'Без категории',
+          categoryId: row['category_id'] as String,
           quantity: row['quantity'] as double,
       )).toList();
       _isLoading = false;
@@ -110,6 +111,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final weightPerPieceController = TextEditingController();
     bool showCalculator = false;
     bool addMode = false;
+    String selectedCategoryId = ingredient.categoryId;
 
     showModalBottomSheet(
       context: context,
@@ -229,6 +231,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         );
                       },
                     ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategoryId,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Категория',
+                      ),
+                      items: _categories.map((c) {
+                        return DropdownMenuItem<String>(value: c.id, child: Text(c.name));
+                      }).toList(),
+                      onChanged: (value) {
+                        setModalState(() {
+                          selectedCategoryId = value!;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -266,13 +284,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () async {
+                              if (selectedCategoryId != ingredient.categoryId) {
+                                await DatabaseHelper.instance
+                                    .updateIngredientCategory(ingredient.id, selectedCategoryId);
+                              }
                               final input = double.tryParse(controller.text.replaceAll(',', '.').trim());
                               if (input != null) {
                                 final newValue = addMode ? _round3(ingredient.quantity + input) : input;
                                 await DatabaseHelper.instance
                                     .updateIngredientQuantity(ingredient.id, newValue);
-                                await _loadIngredients();
                               }
+                              await _loadIngredients();
                               if (context.mounted) Navigator.pop(context);
                             },
                             child: const Text('Сохранить'),

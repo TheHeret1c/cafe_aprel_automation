@@ -3,6 +3,7 @@ class Ingredient {
   final String name;
   final String unit; // кг, л, шт
   final String category; // место хранения
+  final String categoryId;
   final double quantity;
 
   Ingredient({
@@ -10,6 +11,7 @@ class Ingredient {
     required this.name,
     required this.unit,
     required this.category,
+    required this.categoryId,
     required this.quantity,
   });
 
@@ -19,6 +21,7 @@ class Ingredient {
       name: name,
       unit: unit,
       category: category,
+      categoryId: categoryId,
       quantity: quantity ?? this.quantity,
     );
   }
