@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:uuid/uuid.dart';
+import '../models/category.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._internal();
@@ -55,6 +56,8 @@ class DatabaseHelper {
       'Сухой склад',
       'Мясной гроб',
       'Смешанный гроб',
+      'Холодильник суши',
+      'Морозильник суши',
       'Холодильники кухня',
       'Холодильник пицца',
       'Холодильная камера',
@@ -110,5 +113,11 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<List<Category>> getCategories() async {
+    final db = await database;
+    final rows = await db.query('categories');
+    return rows.map(Category.fromMap).toList();
   }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cafe_automation/data/database_helper.dart';
 import 'package:flutter/material.dart';
 import '../models/ingredient.dart';
+import '../models/category.dart';
 import 'package:uuid/uuid.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
@@ -18,7 +19,7 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen> {
   List<Ingredient> _ingredients = [];
-  List<Map<String, dynamic>> _categoryRows = [];
+  List<Category> _categories = [];
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -70,14 +71,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Future<void> _loadIngredients() async {
     await Future.delayed(Duration(seconds: 1));
 
-    final categoryRows = await DatabaseHelper.instance.getAllCategories();
-    final categoryNames = {
-      for (final row in categoryRows) row['id'] as String: row['name'] as String
-    };
+    final categories = await DatabaseHelper.instance.getCategories();
+    final categoryNames = {for (final c in categories) c.id: c.name};
 
     final ingredientsRows = await DatabaseHelper.instance.getAllIngredients();
     setState(() {
-      _categoryRows = categoryRows;
+      _categories = categories;
       _ingredients = ingredientsRows.map((row) => Ingredient(
           id: row['id'] as String,
           name: row['name'] as String,
@@ -106,135 +105,186 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   // Изменение количества ингредиента
   void _editQuantity(Ingredient ingredient) {
-    final controller = TextEditingController(
-        text: ingredient.quantity.toString());
+    final controller = TextEditingController(text: ingredient.quantity.toString());
+    final piecesController = TextEditingController();
+    final weightPerPieceController = TextEditingController();
+    bool showCalculator = false;
+    bool addMode = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 16,
-              bottom: MediaQuery
-                  .of(context)
-                  .viewInsets
-                  .bottom + 16
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ingredient.name, style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      decoration: InputDecoration(
-                        border: const OutlineInputBorder(),
-                        labelText: 'Количество',
-                        suffixText: ingredient.unit,
-                      ),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            void recalculate() {
+              final pieces = double.tryParse(piecesController.text.replaceAll(',', '.')) ?? 0;
+              final weightPerPiece = double.tryParse(weightPerPieceController.text.replaceAll(',', '.')) ?? 0;
+              final totalKg = (pieces * weightPerPiece) / 1000;
+              controller.text = totalKg.toStringAsFixed(3);
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ingredient.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('Задать итог')),
+                        ButtonSegment(value: true, label: Text('Добавить')),
+                      ],
+                      selected: {addMode},
+                      onSelectionChanged: (selection) {
+                        setModalState(() {
+                          addMode = selection.first;
+                          controller.text =
+                          addMode ? '' : _round3(ingredient.quantity).toString();
+                        });
+                      },
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [
-                  _stepButton(controller, -10),
-                  _stepButton(controller, -1),
-                  _stepButton(controller, 1),
-                  _stepButton(controller, 10),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                      onPressed: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Удалить ингредиент?'),
-                            content: Text('«${ingredient.name}» будет удалён из списка.'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Отмена'),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Удалить', style: TextStyle(color: Colors.red)),
-                              ),
-                            ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: addMode ? 'Сколько добавить' : 'Количество',
+                              suffixText: ingredient.unit,
+                            ),
                           ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (addMode)
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: controller,
+                        builder: (context, value, _) {
+                          final total = _round3(ingredient.quantity + _parseNumber(value.text));
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              'Было ${_round3(ingredient.quantity)} → станет $total ${ingredient.unit}',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          );
+                        },
+                      ),
+                    TextButton.icon(
+                      onPressed: () {
+                        setModalState(() {
+                          showCalculator = !showCalculator;
+                        });
+                      },
+                      icon: const Icon(Icons.calculate_outlined),
+                      label: Text(showCalculator ? 'Скрыть калькулятор' : 'Посчитать по количеству'),
+                    ),
+                    if (showCalculator) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: piecesController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(labelText: 'Кол-во шт.', border: OutlineInputBorder()),
+                              onChanged: (_) => setModalState(recalculate),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: weightPerPieceController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(labelText: 'Вес 1 шт. (г)', border: OutlineInputBorder()),
+                              onChanged: (_) => setModalState(recalculate),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    const SizedBox(height: 8),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        final current = double.tryParse(value.text.replaceAll(',', '.')) ?? 0;
+                        return Wrap(
+                          spacing: 8,
+                          children: _stepsFor(current)
+                              .map((step) => _stepButton(controller, step))
+                              .toList(),
                         );
-                        if (confirmed == true) {
-                          await DatabaseHelper.instance.deleteIngredient(ingredient.id);
-                          await _loadIngredients();
-                          if (context.mounted) Navigator.pop(context);
-                        }
                       },
-                      child: const Text('Удалить'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final newValue = double.tryParse(controller.text);
-                        if (newValue != null) {
-                          await DatabaseHelper.instance.updateIngredientQuantity(ingredient.id, newValue);
-                          await _loadIngredients();
-                          // setState(() {
-                          //   final index = _ingredients.indexWhere((i) =>
-                          //   i.id == ingredient.id);
-                          //   _ingredients[index] = ingredient.copyWith(
-                          //       quantity: newValue);
-                          // });
-                        }
-                        if (context.mounted) Navigator.pop(context);
-                        //Navigator.pop(context);
-                      },
-                      child: const Text('Сохранить'),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                            onPressed: () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Удалить ингредиент?'),
+                                  content: Text('«${ingredient.name}» будет удалён из списка.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, false),
+                                      child: const Text('Отмена'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                await DatabaseHelper.instance.deleteIngredient(ingredient.id);
+                                await _loadIngredients();
+                                if (context.mounted) Navigator.pop(context);
+                              }
+                            },
+                            child: const Text('Удалить'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              final input = double.tryParse(controller.text.replaceAll(',', '.').trim());
+                              if (input != null) {
+                                final newValue = addMode ? _round3(ingredient.quantity + input) : input;
+                                await DatabaseHelper.instance
+                                    .updateIngredientQuantity(ingredient.id, newValue);
+                                await _loadIngredients();
+                              }
+                              if (context.mounted) Navigator.pop(context);
+                            },
+                            child: const Text('Сохранить'),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-              // SizedBox(
-              //   width: double.infinity,
-              //   child: ElevatedButton(
-              //     onPressed: () async {
-              //       final newValue = double.tryParse(controller.text);
-              //       if (newValue != null) {
-              //         await DatabaseHelper.instance.updateIngredientQuantity(ingredient.id, newValue);
-              //         await _loadIngredients();
-              //         // setState(() {
-              //         //   final index = _ingredients.indexWhere((i) =>
-              //         //   i.id == ingredient.id);
-              //         //   _ingredients[index] = ingredient.copyWith(
-              //         //       quantity: newValue);
-              //         // });
-              //       }
-              //       if (context.mounted) Navigator.pop(context);
-              //       //Navigator.pop(context);
-              //     },
-              //     child: const Text('Сохранить'),
-              //   ),
-              // )
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -245,7 +295,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final nameController = TextEditingController();
     final quantityController = TextEditingController(text: '0');
     String selectedUnit = 'кг';
-    String? selectedCategoryId = _categoryRows.isNotEmpty ? _categoryRows.first['id'] as String : null;
+    String? selectedCategoryId = _categories.isNotEmpty ? _categories.first.id : null;
+    String? nameError;
 
     showModalBottomSheet(
       context: context,
@@ -268,9 +319,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   const SizedBox(height: 16,),
                   TextField(
                     controller: nameController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       border: OutlineInputBorder(),
                       labelText: 'Название',
+                      errorText: nameError,
                     ),
                   ),
                   const SizedBox(height: 12,),
@@ -280,10 +332,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       border: OutlineInputBorder(),
                       labelText: 'Категория',
                     ),
-                    items: _categoryRows.map((row) {
+                    items: _categories.map((c) {
                       return DropdownMenuItem<String>(
-                        value: row['id'] as String,
-                        child: Text(row['name'] as String),
+                        value: c.id,
+                        child: Text(c.name),
                       );
                     }).toList(),
                     onChanged: (value) {
@@ -325,9 +377,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     child: ElevatedButton(
                         onPressed: () async {
                           final name = nameController.text.trim();
-                          final quantity = double.tryParse(quantityController.text) ?? 0;
 
-                          if (name.isEmpty || selectedCategoryId == null) return;
+                          if (name.isEmpty) {
+                            setModalState(() {
+                              nameError = 'Введите название';
+                            });
+                            return;
+                          }
+                          if (selectedCategoryId == null) return;
+
+                          final quantity = double.tryParse(quantityController.text.replaceAll(',', '.').trim()) ?? 0;
 
                           final newIngredient = {
                             'id': const Uuid().v4(),
@@ -357,15 +416,28 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Widget _stepButton(TextEditingController controller, double step) {
+    final label = step == step.roundToDouble()
+        ? step.toInt().toString()
+        : step.toString();
+
     return OutlinedButton(
       onPressed: () {
-        final current = double.tryParse(controller.text) ?? 0;
+        final current = double.tryParse(controller.text.replaceAll(',', '.')) ?? 0;
         final updated = (current + step).clamp(0, double.infinity);
-        controller.text = updated.toString();
+        controller.text = double.parse(updated.toStringAsFixed(3)).toString();
       },
-      child: Text(step > 0 ? '+$step' : '$step'),
+      child: Text(step > 0 ? '+$label' : label),
     );
   }
+
+  List<double> _stepsFor(double value) {
+    return value < 5 ? [-1, -0.1, 0.1, 1] : [-10, -1, 1, 10];
+  }
+
+  double _parseNumber(String text) =>
+      double.tryParse(text.replaceAll(',', '.').trim()) ?? 0;
+
+  double _round3(double v) => double.parse(v.toStringAsFixed(3));
 
   @override
   Widget build(BuildContext context) {
@@ -422,7 +494,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : (isSearching
-                ? ListView.builder(
+                ? (filteredIngredients.isEmpty
+                ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Ничего не найдено',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ),
+            )
+                : ListView.builder(
               itemCount: filteredIngredients.length,
               itemBuilder: (context, index) {
                 final ingredient = filteredIngredients[index];
@@ -433,7 +515,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   onTap: () => _editQuantity(ingredient),
                 );
               },
-            )
+            ))
                 : ListView.builder(
               itemCount: categories.length,
               itemBuilder: (context, index) {
