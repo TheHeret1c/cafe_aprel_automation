@@ -1,17 +1,46 @@
-# cafe_automation
+# Cafe Aprel Automation
 
-A new Flutter project.
+Мобильное приложение для автоматизации рутинных процессов в небольшом кафе. Делается для реального заведения: заменяет отвалившуюся интеграцию с iiko и закрывает задачи, которые персонал до этого вёл на бумаге.
 
-## Getting Started
+<p>
+  <img src="docs/log_screen.jpg" width="250">
+  <img src="docs/menu_screen.jpg" width="250">
+  <img src="docs/remnants_screen.jpg" width="250">
+</p>
 
-This project is a starting point for a Flutter application.
+## Статус
 
-A few resources to get you started if this is your first Flutter project:
+🟢 **Инвентаризация** — работает локально на телефоне, уже использовалась для реального пересчёта склада в кафе.
+🟡 Бэкенд и синхронизация между устройствами — в разработке.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Модули
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- [x] **Инвентаризация** — пересчёт остатков на складе
+- [ ] **Калькулятор техкарт** — пересчёт веса ингредиентов под нужное количество порций
+- [ ] **Генератор бизнес-ланчей** — составление меню на неделю по правилам кафе (например, курица в понедельник, рыба в четверг)
+- [ ] **Блокнот официанта** — учёт столов и заказов
+
+## Почему offline-first
+
+В здании толстые старые стены, и в подсобных помещениях почти не ловит ни мобильная сеть, ни Wi-Fi. При этом с приложением одновременно работают несколько человек. Поэтому данные хранятся на устройстве, а синхронизация идёт, когда появляется связь:
+
+- идентификаторы записей (UUID) генерируются на клиенте, чтобы не зависеть от сервера при создании;
+- синхронизация основана на номерах ревизий (по мотивам механизма ревизий iiko): клиент отправляет изменения и получает всё, что появилось после его последней ревизии;
+- сохраняется история изменений.
+
+## Стек
+
+| Часть | Технологии |
+|---|---|
+| Клиент | Flutter / Dart (Android, iOS) |
+| Бэкенд (в разработке) | Rust, Docker |
+| Хостинг | self-hosted сервер на Ubuntu |
+
+Тестируется на двух устройствах: современном флагмане и смартфоне шестилетней давности, чтобы приложение не тормозило на слабом железе.
+
+## Запуск
+
+```bash
+flutter pub get
+flutter run
+```
